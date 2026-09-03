@@ -18,7 +18,7 @@ Algunos de los conceptos que este script contiene:
 -- Etc..
 
 Mi espacio de trabajo:
-Utilice Rojo - Visual Studio Code - StyLua (Formateador de codigo (no usa IA por siacaso)) - Selene (linter)]]
+Utilice Rojo - Visual Studio Code - StyLua (Formateador de codigo (no usa IA por siacaso)) - Selene (linter) - GitHub]]
 
 local Players: Players = game:GetService("Players")
 local Workspace: Workspace = game:GetService("Workspace")
