@@ -1,24 +1,43 @@
---[[Este script añade funcionalidades a una torreta, como poder montarse a la torreta apretando un boton, animacion
-de cuando un jugador se sube a la torreta junto con un efecto de sonido de cuando se activa o inicia la animacion,
-poder apuntar con la torreta moviendo la camara, activacion de una UI que tiene una mira y un boton que indica que tecla
-apretar para bajarse de la torreta, que la torreta pueda disparar esto incluye que manteniendo click izquierdo comiencen a girar
-los cañones de la torreta y cuando se suelta el click izquierdo comiencen a desacelerar los cañones de la torreta, junto
-con sus respectivas animaciones tanto de aceleracion como de desaceleracion y si se mantiene 3 segundos el click izquierdo
-la torreta disparara, tambien incluye el poder bajarse de la torreta y su respectiva animacion, las animaciones se replican
-a todos los clientes tambien el movimiento de la torreta que realiza el jugador que esta subido a ella junto con los rayos
-laser que dispara la torreta tambien se replican a todos los clientes, etc...
+--[[This script adds features to a turret, such as the ability to mount the
+turret by pressing a button, an animation that plays when a player climbs onto
+the turret along with a sound effect when the animation is triggered or starts,
+the ability to aim the turret by moving the camera, and a UI that features a
+crosshair and a button indicating which key to press to dismount from the
+turret. The turret can also fire; this includes holding down the left mouse
+button to start rotate the turret’s cannons, and when the left mouse button is
+released, the cannons begin to decelerate, along with their respective
+animations for both acceleration and deceleration; if the left mouse button is
+held for 3 seconds, left-click for 3 seconds, the turret will fire; it also
+includes the ability to dismount from the turret and its corresponding
+animation. The animations are replicated to all clients; likewise, the turret’s
+movement controlled by the player who is mounted on it, along with the laser
+beams fired by the turret, are also replicated to all clients, etc...
 
-Algunos de los conceptos que este script contiene:
+Some of the concepts this script includes:
 
--- Arquitectura cliente-servidor
--- Replicacion de animaciones
+-- Client-server architecture
+-- Animation replication
 -- CFrames
 -- Raycasting
--- Animaciones con RunService
--- Etc..
+-- Animations with RunService
+-- Etc.
 
-Mi espacio de trabajo:
-Utilice Rojo - Visual Studio Code - StyLua (Formateador de codigo (no usa IA por siacaso)) - Selene (linter) - GitHub]]
+I follow the style of the Lua Style Guide for Roblox—I believe it’s from
+Roblox, created, I think, by Roblox engineers—which adheres to style rules such
+as: using camelCase for variables, PascalCase for services and for classes and
+enumeration-type objects, using LOUD_SNAKE_CASE for constants, limiting
+comments to 80 columns in width, etc... (although I haven’t finished the Lua
+style guide yet—I’m a little over halfway through)
+
+I use StyLua, a code formatter that primarily follows the Roblox Lua Style
+Guide, with a few deviations; it helps organize and format the code
+
+And I follow some advice from Robert C. Martin’s book *Clean Code* to write
+cleaner, more readable code
+
+My workspace:
+I use Rojo - Visual Studio Code - StyLua (code formatter—does not use AI) -
+Selene (linter) - GitHub]]
 
 local Players: Players = game:GetService("Players")
 local Workspace: Workspace = game:GetService("Workspace")
@@ -37,15 +56,18 @@ local soundsFolder: Folder = ReplicatedStorage:WaitForChild("Sounds")
 local laserWeldSound: Sound = soundsFolder:WaitForChild("LaserWeldSound") :: Sound
 local activeLaserSound: Sound = soundsFolder:WaitForChild("ActiveLaserSound") :: Sound
 local remoteEventsFolder: Folder = ReplicatedStorage:WaitForChild("RemoteEvents")
-local playerClimbsTheTurret: RemoteEvent = remoteEventsFolder:WaitForChild("PlayerClimbsTheTurret") :: RemoteEvent
-local onLaserTurretRaycast: RemoteEvent = remoteEventsFolder:WaitForChild("OnLaserTurretRaycast") :: RemoteEvent
+local playerClimbsTheTurret: RemoteEvent =
+	remoteEventsFolder:WaitForChild("PlayerClimbsTheTurret") :: RemoteEvent
+local onLaserTurretRaycast: RemoteEvent =
+	remoteEventsFolder:WaitForChild("OnLaserTurretRaycast") :: RemoteEvent
 local animationRotatingCannonsAllClients: RemoteEvent =
 	remoteEventsFolder:WaitForChild("AnimationRotatingCannonsAllClients") :: RemoteEvent
 local updateLaserTurretPosition: RemoteEvent =
 	remoteEventsFolder:WaitForChild("UpdateLaserTurretPosition") :: RemoteEvent
 local animationOnMountLaserTurret: RemoteEvent =
 	remoteEventsFolder:WaitForChild("AnimationOnMountLaserTurret") :: RemoteEvent
-local enabledLaserTurretGui: RemoteEvent = remoteEventsFolder:WaitForChild("EnabledLaserTurretGui") :: RemoteEvent
+local enabledLaserTurretGui: RemoteEvent =
+	remoteEventsFolder:WaitForChild("EnabledLaserTurretGui") :: RemoteEvent
 local laserTurretGui: ScreenGui = StarterGui:WaitForChild("LaserTurretGui") :: ScreenGui
 local player: Player = Players.LocalPlayer
 local character: Model = player.Character or player.CharacterAdded:Wait()
@@ -54,14 +76,12 @@ local camera: Camera = Workspace:WaitForChild("Camera") :: Camera
 local laserTurretsFolder: Folder = Workspace:WaitForChild("LaserTurrets") :: Folder
 local laserTurrets = laserTurretsFolder:GetChildren()
 local wallFolder: Folder = Workspace:WaitForChild("Wall") :: Folder
-
 local currentLaserTurret: Model = nil
 local heartbeatConnections = {
 	MovingLaserTurret = nil,
 	OnMountLaserTurret = nil,
 	OnDismountTurret = nil,
 }
-
 local userInputServiceConnections = { OnMovementMouse = nil }
 local rotatingCannonsAllClientsAssets = {}
 local dismounting: boolean = false
@@ -77,18 +97,18 @@ local rotacionY = 0
 
 --[[I use this mathematical function to calculate the speed at which the
 cannons continue to spin when the player holds down the left mouse button and
-when they release it, so that if they click it again and/or release it later, the
-speed remains the same, ensuring a smooth and, let's say, realistic
+when they release it, so that if they click it again and/or release it later,
+the speed remains the same, ensuring a smooth and, let's say, realistic
 transition in the acceleration and deceleration animation]]
 
 local function lerp(number1: number, number2: number, alpha: number): number
 	return number1 + alpha * (number2 - number1)
 end
 
---[[Without this feature, the player would not be able to move the camera with the mouse while in
-the turret or move the crosshairs to aim and shoot, and the
-server would not be able to receive the rotation data needed to move the laser turret
-to follow the player's mouse movements]]
+--[[Without this feature, the player would not be able to move the camera with
+the mouse while in the turret or move the crosshairs to aim and shoot, and the
+server would not be able to receive the rotation data needed to move the laser
+turret to follow the player's mouse movements]]
 
 local function laserTurretAimingMovement()
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
@@ -113,7 +133,8 @@ local function laserTurretAimingMovement()
 			end
 			-- The current rotation is retrieved and sent to the server along
 			-- with the current laser turret position
-			local newLaserTurretRotation: CFrame = CFrame.Angles(math.rad(rotacionY), math.rad(rotacionX), math.rad(0))
+			local newLaserTurretRotation: CFrame =
+				CFrame.Angles(math.rad(rotacionY), math.rad(rotacionX), math.rad(0))
 			updateLaserTurretPosition:FireServer(newLaserTurretRotation, currentLaserTurret)
 		end
 	)
@@ -274,18 +295,21 @@ local function rayRendering(rayAssets)
 			soundLaserActivePart.Size = Vector3.new(
 				SIZE_ACTIVE_LASER_SOUND_AREA,
 				SIZE_ACTIVE_LASER_SOUND_AREA,
-				(leftLaserOrigin.Position - leftRaycastResult2.Position).Magnitude + SIZE_ACTIVE_LASER_SOUND_AREA
+				(leftLaserOrigin.Position - leftRaycastResult2.Position).Magnitude
+					+ SIZE_ACTIVE_LASER_SOUND_AREA
 			)
 			soundLaserActivePart.CFrame = CFrame.new(
 				leftLaserOrigin.Position
-					+ leftLookVector * ((leftLaserOrigin.Position - leftRaycastResult2.Position).Magnitude / 2),
+					+ leftLookVector
+						* ((leftLaserOrigin.Position - leftRaycastResult2.Position).Magnitude / 2),
 				leftRaycastResult2.Position
 			)
 			activeLaserSoundDetector(soundLaserActivePart)
 		end
 	else
 		for _, endAttachment in leftEndAttachments do
-			endAttachment.WorldPosition = leftLaserOrigin.Position + leftLookVector * leftOffSetMagnitude
+			endAttachment.WorldPosition = leftLaserOrigin.Position
+				+ leftLookVector * leftOffSetMagnitude
 		end
 		if not sendSignalToTheServer then
 			soundLaserActivePart.Size = Vector3.new(
@@ -308,18 +332,21 @@ local function rayRendering(rayAssets)
 			soundLaserActivePartClone.Size = Vector3.new(
 				SIZE_ACTIVE_LASER_SOUND_AREA,
 				SIZE_ACTIVE_LASER_SOUND_AREA,
-				(rightLaserOrigin.Position - rightRaycastResult2.Position).Magnitude + SIZE_ACTIVE_LASER_SOUND_AREA
+				(rightLaserOrigin.Position - rightRaycastResult2.Position).Magnitude
+					+ SIZE_ACTIVE_LASER_SOUND_AREA
 			)
 			soundLaserActivePartClone.CFrame = CFrame.new(
 				rightLaserOrigin.Position
-					+ rightLookVector * ((rightLaserOrigin.Position - rightRaycastResult2.Position).Magnitude / 2),
+					+ rightLookVector
+						* ((rightLaserOrigin.Position - rightRaycastResult2.Position).Magnitude / 2),
 				rightRaycastResult2.Position
 			)
 			activeLaserSoundDetector(soundLaserActivePartClone)
 		end
 	else
 		for _, endAttachment in rightEndAttachments do
-			endAttachment.WorldPosition = rightLaserOrigin.Position + rightLookVector * rightOffSetMagnitude
+			endAttachment.WorldPosition = rightLaserOrigin.Position
+				+ rightLookVector * rightOffSetMagnitude
 		end
 		if not sendSignalToTheServer then
 			soundLaserActivePartClone.Size = Vector3.new(
@@ -375,8 +402,10 @@ local function calculatingPositionsForRayRendering(rayAssets)
 		local leftOffSetMagnitude: number = nil
 		local rightOffsetMagnitude: number = nil
 		if raycastResult1 then
-			leftLookVector = CFrame.lookAt(leftLaserOrigin.Position, raycastResult1.Position).LookVector
-			rightLookVector = CFrame.lookAt(rightLaserOrigin.Position, raycastResult1.Position).LookVector
+			leftLookVector =
+				CFrame.lookAt(leftLaserOrigin.Position, raycastResult1.Position).LookVector
+			rightLookVector =
+				CFrame.lookAt(rightLaserOrigin.Position, raycastResult1.Position).LookVector
 			leftOffSetMagnitude = (-leftLaserOrigin.Position + raycastResult1.Position).Magnitude
 			rightOffsetMagnitude = (-rightLaserOrigin.Position + raycastResult1.Position).Magnitude
 		else
@@ -428,7 +457,11 @@ verifies whether the player who fired the laser beams is on top of the laser
 turret; therefore, the functions `calculatingPositionsForRayRendering()` and
 `rayRendering()` would not work]]
 
-local function createAssetsForRenderingRay(playerWhoShoot: Player, leftEndAttachments, rightEndAttachments)
+local function createAssetsForRenderingRay(
+	playerWhoShoot: Player,
+	leftEndAttachments,
+	rightEndAttachments
+)
 	local assets = rotatingCannonsAllClientsAssets[playerWhoShoot]
 	local leftSmallBarrel: MeshPart = assets.leftSmallBarrel
 	local rightSmallBarrel: MeshPart = assets.rightSmallBarrel
@@ -444,7 +477,8 @@ local function createAssetsForRenderingRay(playerWhoShoot: Player, leftEndAttach
 	local playerCharacter: Model = playerWhoShoot.Character or playerWhoShoot.CharacterAdded:Wait()
 	local raycastParams: RaycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = { assets.laserTurret, playerCharacter, camera, wallFolder }
+	raycastParams.FilterDescendantsInstances =
+		{ assets.laserTurret, playerCharacter, camera, wallFolder }
 
 	local laserTurretTop: MeshPart = assets.laserTurret:WaitForChild("LaserTurretTop")
 	local cameraPosition: Part = laserTurretTop:WaitForChild("CameraPosition") :: Part
@@ -570,7 +604,8 @@ local function rotatingCannonsDecelerationAnimationForAllClients(playerWhoShoot:
 			end
 			return
 		else
-			assets.currentCannonRotationSpeed = lerp(oldCannonRotationSpeed, START_CANNON_ROTATION_SPEED, alpha)
+			assets.currentCannonRotationSpeed =
+				lerp(oldCannonRotationSpeed, START_CANNON_ROTATION_SPEED, alpha)
 		end
 		assets.leftSmallBarrelWeld.C1 = assets.leftSmallBarrelWeld.C1
 			* CFrame.Angles(0, 0, assets.currentCannonRotationSpeed)
@@ -611,7 +646,8 @@ local function rotatingCannonsAccelerationAnimationForAllClients(playerWhoShoot:
 				task.spawn(shootOnAllClients, playerWhoShoot)
 			end
 		else
-			assets.currentCannonRotationSpeed = lerp(oldCannonRotationSpeed, FINAL_CANNON_ROTATION_SPEED, alpha)
+			assets.currentCannonRotationSpeed =
+				lerp(oldCannonRotationSpeed, FINAL_CANNON_ROTATION_SPEED, alpha)
 		end
 		assets.leftSmallBarrelWeld.C1 = assets.leftSmallBarrelWeld.C1
 			* CFrame.Angles(0, 0, assets.currentCannonRotationSpeed)
@@ -625,7 +661,11 @@ laser beams when the player fires for the first time, and I also check whether
 those assets had already been created to determine if the player had fired
 before and to see if the cannons need to be slowed down or sped up now]]
 
-local function rotatingCannonsAllClients(playerWhoShoot: Player, rotatingCannonsOnOff: boolean, laserTurret: Model)
+local function rotatingCannonsAllClients(
+	playerWhoShoot: Player,
+	rotatingCannonsOnOff: boolean,
+	laserTurret: Model
+)
 	-- We check whether the player who fired the shot had any assets created
 	-- previously; if not, we'll create them
 	if rotatingCannonsAllClientsAssets[playerWhoShoot] then
@@ -640,8 +680,10 @@ local function rotatingCannonsAllClients(playerWhoShoot: Player, rotatingCannons
 		end
 		local assets = {}
 		local weldsFolder: Folder = laserTurret:WaitForChild("Welds") :: Folder
-		assets["leftSmallBarrelWeld"] = weldsFolder:WaitForChild("LeftBigBarrellWithLeftSmallBarrel")
-		assets["rightSmallBarrelWeld"] = weldsFolder:WaitForChild("RightBigBarrelWithRighSmallBarrel")
+		assets["leftSmallBarrelWeld"] =
+			weldsFolder:WaitForChild("LeftBigBarrellWithLeftSmallBarrel")
+		assets["rightSmallBarrelWeld"] =
+			weldsFolder:WaitForChild("RightBigBarrelWithRighSmallBarrel")
 		assets["leftSmallBarrel"] = laserTurret:WaitForChild("LaserTurretLeftSmallBarrel")
 		assets["rightSmallBarrel"] = laserTurret:WaitForChild("LaserTurretRightSmallBarrel")
 		assets["currentCannonRotationSpeed"] = START_CANNON_ROTATION_SPEED
@@ -688,7 +730,8 @@ animation be heard]]
 local function resetTurretPosition(laserTurret: Model)
 	local ANIMATION_DURATION = 1.5
 	local laserTurretTop: MeshPart = laserTurret:WaitForChild("LaserTurretTop") :: MeshPart
-	local resetTurretPositionSound: Sound = laserTurretTop:WaitForChild("ResetTurretPosition") :: Sound
+	local resetTurretPositionSound: Sound =
+		laserTurretTop:WaitForChild("ResetTurretPosition") :: Sound
 	local weldsFolder: Folder = laserTurret:WaitForChild("Welds") :: Folder
 	local weld: Weld = weldsFolder:WaitForChild("BottomSmallPartWithTop") :: Weld
 	local targetCFrame: CFrame = CFrame.new()
@@ -719,7 +762,8 @@ local function animationWhenAssemblingTheLaserTurret(laserTurret: Model)
 	local OFFSET_TO_MOVE_UPWARD = 2.5 -- In studs
 	local ANIMATION_DURATION = 1.5
 	local laserTurretTop: MeshPart = laserTurret:WaitForChild("LaserTurretTop") :: MeshPart
-	local resetTurretPositionSound: Sound = laserTurretTop:WaitForChild("ResetTurretPosition") :: Sound
+	local resetTurretPositionSound: Sound =
+		laserTurretTop:WaitForChild("ResetTurretPosition") :: Sound
 	local weldsFolder: Folder = laserTurret:WaitForChild("Welds") :: Folder
 	local weld: Weld = weldsFolder:WaitForChild("BottomSmallPartWithTop") :: Weld
 	local targetCFrame: CFrame = weld.C1 * CFrame.new(0, -OFFSET_TO_MOVE_UPWARD, 0)
@@ -727,18 +771,20 @@ local function animationWhenAssemblingTheLaserTurret(laserTurret: Model)
 	local currentTime: number = 0
 	-- We start the sound for the animation
 	resetTurretPositionSound:Play()
-	heartbeatConnections.OnMountLaserTurret = RunService.Heartbeat:Connect(function(deltaTime: number)
-		currentTime += deltaTime
-		local alpha: number = currentTime / ANIMATION_DURATION
-		weld.C1 = startC1CFrame:Lerp(targetCFrame, alpha)
-		if alpha >= 1 then
-			heartbeatConnections.OnMountLaserTurret:Disconnect()
-			weld.C1 = targetCFrame
-			-- We send the final CFrame to the server to position it at that
-			-- position
-			animationOnMountLaserTurret:FireServer("Place CFrame", laserTurret, targetCFrame)
+	heartbeatConnections.OnMountLaserTurret = RunService.Heartbeat:Connect(
+		function(deltaTime: number)
+			currentTime += deltaTime
+			local alpha: number = currentTime / ANIMATION_DURATION
+			weld.C1 = startC1CFrame:Lerp(targetCFrame, alpha)
+			if alpha >= 1 then
+				heartbeatConnections.OnMountLaserTurret:Disconnect()
+				weld.C1 = targetCFrame
+				-- We send the final CFrame to the server to position it at that
+				-- position
+				animationOnMountLaserTurret:FireServer("Place CFrame", laserTurret, targetCFrame)
+			end
 		end
-	end)
+	)
 end
 
 --[[Without this feature, the values or connections associated with the laser
@@ -771,7 +817,8 @@ local function dismountLaserTurret()
 
 	animationOnMountLaserTurret:FireServer("End animation", currentLaserTurret)
 	playerClimbsTheTurret:FireServer(desolderCharacter, currentLaserTurret, playerDead)
-	enabledLaserTurretGui:FireServer(laserTurretGui.Name) -- Make invisible the laser laserTurret screen gui
+	enabledLaserTurretGui:FireServer(laserTurretGui.Name) -- Hide the laser
+	-- turret's graphical interface
 
 	UserInputService.MouseIconEnabled = true
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -822,23 +869,31 @@ local function setCameraPositionOnLaserTurret()
 	local targetCFrame: CFrame = laserTurretTop.CFrame * OFFSET_CAMERA_ON_THE_LASER_TURRET
 	local currentTime: number = 0
 	local startCameraCFrame: CFrame = camera.CFrame
-	RunService:BindToRenderStep("setCameraPosition", Enum.RenderPriority.Camera.Value, function(deltaTime: number)
-		currentTime += deltaTime
-		local alpha = currentTime / SECONDS_TO_LERP
-		camera.CFrame = startCameraCFrame:Lerp(targetCFrame, alpha)
-		if alpha >= 1 then
-			RunService:UnbindFromRenderStep("setCameraPosition")
-			camera.CFrame = targetCFrame
-			task.spawn(currentThread)
+	RunService:BindToRenderStep(
+		"setCameraPosition",
+		Enum.RenderPriority.Camera.Value,
+		function(deltaTime: number)
+			currentTime += deltaTime
+			local alpha = currentTime / SECONDS_TO_LERP
+			camera.CFrame = startCameraCFrame:Lerp(targetCFrame, alpha)
+			if alpha >= 1 then
+				RunService:UnbindFromRenderStep("setCameraPosition")
+				camera.CFrame = targetCFrame
+				task.spawn(currentThread)
+			end
 		end
-	end)
+	)
 	coroutine.yield()
 	-- Once the camera has finished moving to the position it should be in when
 	-- the player climbs onto a laser turret, we keep the camera fixed in that
 	-- spot
-	RunService:BindToRenderStep("lockCameraPosition", Enum.RenderPriority.Camera.Value, function(deltaTime: number)
-		camera:PivotTo(laserTurretTop.CFrame * OFFSET_CAMERA_ON_THE_LASER_TURRET)
-	end)
+	RunService:BindToRenderStep(
+		"lockCameraPosition",
+		Enum.RenderPriority.Camera.Value,
+		function(deltaTime: number)
+			camera:PivotTo(laserTurretTop.CFrame * OFFSET_CAMERA_ON_THE_LASER_TURRET)
+		end
+	)
 end
 
 --[[Without this feature, I wouldn't be able to tell when the player is on the
@@ -862,9 +917,20 @@ local function onButtonActivated(laserTurret: Model)
 	playerClimbsTheTurret:FireServer(desolderCharacter, laserTurret)
 	setCameraPositionOnLaserTurret()
 	laserTurretAimingMovement()
-	enabledLaserTurretGui:FireServer(laserTurretGui.Name) -- Make visible the laser laserTurret screen gui
-	ContextActionService:BindAction("OnActivatedButtonToDismount", dismountLaserTurret, false, Enum.KeyCode.E)
-	ContextActionService:BindAction("Shoot", animationForRotatingCannons, false, Enum.UserInputType.MouseButton1)
+	enabledLaserTurretGui:FireServer(laserTurretGui.Name) -- It displays the
+	-- laser turret's graphical interface
+	ContextActionService:BindAction(
+		"OnActivatedButtonToDismount",
+		dismountLaserTurret,
+		false,
+		Enum.KeyCode.E
+	)
+	ContextActionService:BindAction(
+		"Shoot",
+		animationForRotatingCannons,
+		false,
+		Enum.UserInputType.MouseButton1
+	)
 end
 
 --[[Without this function, a button would not be created for each laser turret,
@@ -899,16 +965,18 @@ local function createButtonToMount(laserTurret: Model)
 	-- turret was occupied by another player or was unoccupied, and we enable
 	-- or disable the button for the laser turret so that it can be mounted or
 	-- cannot be mounted
-	playerClimbsTheTurret.OnClientEvent:Connect(function(playerWhoTriggeredTheEvent: Player, desolderCharacter: boolean)
-		if playerWhoTriggeredTheEvent.Name == player.Name then
-			return
+	playerClimbsTheTurret.OnClientEvent:Connect(
+		function(playerWhoTriggeredTheEvent: Player, desolderCharacter: boolean)
+			if playerWhoTriggeredTheEvent.Name == player.Name then
+				return
+			end
+			if not desolderCharacter then
+				button.Enabled = false
+			else
+				button.Enabled = true
+			end
 		end
-		if not desolderCharacter then
-			button.Enabled = false
-		else
-			button.Enabled = true
-		end
-	end)
+	)
 end
 
 --[[Without this function, the feature for creating a button on each laser
@@ -933,10 +1001,11 @@ local function onPlayerDead()
 	dismountLaserTurret()
 end
 
---[[Sin esta funcion no se podria actualizar el personaje del jugador y el
-humanoid del jugador cuando el jugador muere ni enlazar nuevamente la conexion
-del evento que se activa cuando el jugador muere a la funcion encargada de ----
-manejar si el jugador muere subido de la torreta]]
+--[[Without this function, it would not be possible to update the player's
+character and the player's humanoid when the player dies, nor to re-link the
+connection between the event that triggers when the player dies and the
+function responsible for handling the situation where the player dies while
+mounted on the turret]]
 
 local function onCharacterAdded(newCharacter: Model)
 	character = newCharacter
@@ -966,13 +1035,15 @@ replicated to all clients when the cannons of a laser turret
 rotate—accelerating and decelerating—and when it fires laser beams and when it
 stops firing laser beams]]
 
-animationRotatingCannonsAllClients.OnClientEvent:Connect(function(playerWhoTriggeredTheEvent: Player, ...)
-	if player.Name == playerWhoTriggeredTheEvent.Name then
-		return
+animationRotatingCannonsAllClients.OnClientEvent:Connect(
+	function(playerWhoTriggeredTheEvent: Player, ...)
+		if player.Name == playerWhoTriggeredTheEvent.Name then
+			return
+		end
+		local arguments = { ... }
+		rotatingCannonsAllClients(playerWhoTriggeredTheEvent, arguments[1], arguments[2])
 	end
-	local arguments = { ... }
-	rotatingCannonsAllClients(playerWhoTriggeredTheEvent, arguments[1], arguments[2])
-end)
+)
 
 --[[Without this connection, it would not be possible to trigger the event that
 is activated when the player dies for the first time]]
