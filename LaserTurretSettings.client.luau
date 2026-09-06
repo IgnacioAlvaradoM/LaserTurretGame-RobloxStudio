@@ -35,6 +35,11 @@ Guide, with a few deviations; it helps organize and format the code
 And I follow some advice from Robert C. Martin’s book *Clean Code* to write
 cleaner, more readable code
 
+The system, as I wrote it, is still scalable, even though I didn't use OOP
+(object-oriented programming), which would have made it more scalable and
+offered other advantages. I didn't use OOP because I wanted to incorporate most
+of the system into a script to apply to the role.
+
 My workspace:
 I use Rojo - Visual Studio Code - StyLua (code formatter—does not use AI) -
 Selene (linter) - GitHub(To save files)]]
