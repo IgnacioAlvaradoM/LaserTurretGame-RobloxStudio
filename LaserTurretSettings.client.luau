@@ -37,7 +37,7 @@ cleaner, more readable code
 
 My workspace:
 I use Rojo - Visual Studio Code - StyLua (code formatter—does not use AI) -
-Selene (linter) - GitHub]]
+Selene (linter) - GitHub(To save files)]]
 
 local Players: Players = game:GetService("Players")
 local Workspace: Workspace = game:GetService("Workspace")
